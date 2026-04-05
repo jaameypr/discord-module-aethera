@@ -1,0 +1,33 @@
+server:
+  port: 8080
+
+spring:
+  application:
+    name: aethera-discord-module
+  threads:
+    virtual:
+      enabled: true
+  data:
+    mongodb:
+      uri: ${MONGODB_URI:mongodb://localhost:27017/aethera_mod_discord}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+  endpoint:
+    health:
+      show-details: always
+
+# Aethera integration
+aethera:
+  api-key: ${AETHERA_API_KEY:}
+  callback-url: ${AETHERA_CALLBACK_URL:http://aethera-app:3000}
+  log-poll-interval-ms: ${AETHERA_LOG_POLL_INTERVAL_MS:3000}
+
+# Discord bot
+discord:
+  bot-token: ${DISCORD_BOT_TOKEN:}
+  client-id: ${DISCORD_CLIENT_ID:}
+  public-key: ${DISCORD_PUBLIC_KEY:}

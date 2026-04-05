@@ -1,0 +1,89 @@
+{
+  "id": "discord",
+  "name": "Discord Integration",
+  "version": "1.0.0",
+  "description": "Bridges Minecraft server events to Discord — chat relay, join/leave notifications, whitelist request approvals",
+  "author": "pruefertit",
+  "icon": "message-circle",
+  "type": "docker",
+  "exposure": "internal",
+  "minAetheraVersion": "0.2.0",
+
+  "docker": {
+    "build": {
+      "repository": "https://github.com/jaameypr/discord-module-aethera.git",
+      "context": ".",
+      "dockerfile": "Dockerfile"
+    },
+    "port": 8080,
+    "healthCheck": "/actuator/health",
+    "volumes": {},
+    "resources": {
+      "memoryLimit": "512m"
+    }
+  },
+
+  "auth": {
+    "strategy": "none"
+  },
+
+  "database": {
+    "type": "mongodb",
+    "name": "aethera_mod_discord"
+  },
+
+  "sidebar": {
+    "section": "Module",
+    "items": []
+  },
+
+  "env": {
+    "auto": [
+      "MONGODB_URI"
+    ],
+    "configurable": [
+      {
+        "key": "DISCORD_BOT_TOKEN",
+        "label": "Discord Bot Token",
+        "description": "Token from the Discord Developer Portal (Bot → Token)",
+        "default": "",
+        "required": true,
+        "secret": true
+      },
+      {
+        "key": "DISCORD_CLIENT_ID",
+        "label": "Discord Application / Client ID",
+        "description": "Application ID from the Discord Developer Portal (General Information)",
+        "default": "",
+        "required": true
+      },
+      {
+        "key": "DISCORD_PUBLIC_KEY",
+        "label": "Discord Public Key",
+        "description": "Public key for interaction signature verification (General Information → Public Key)",
+        "default": "",
+        "required": true,
+        "secret": true
+      },
+      {
+        "key": "AETHERA_CALLBACK_URL",
+        "label": "Aethera Internal URL",
+        "description": "Internal URL of the Aethera app (used for log polling and whitelist callbacks)",
+        "default": "http://aethera-app:3000",
+        "required": true
+      },
+      {
+        "key": "AETHERA_API_KEY",
+        "label": "Aethera Internal API Key",
+        "description": "Shared secret used to authenticate requests between this module and Aethera. Leave empty to rely on Docker-network isolation only (less secure).",
+        "default": "",
+        "required": false,
+        "secret": true
+      }
+    ]
+  },
+
+  "permissions": [
+    { "name": "module.discord.*", "description": "Full access to the Discord integration module" }
+  ]
+}
