@@ -61,6 +61,8 @@ public class AetheraLogPollerService {
         }
 
         log.info("[log-poller] polling {} configured server(s)", configs.size());
+
+        for (ServerDiscordConfig config : configs) {
             if (config.getGuildId() == null) continue;
 
             boolean anyChannelEnabled =
