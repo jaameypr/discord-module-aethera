@@ -97,7 +97,11 @@ public class LogProcessingService {
 
     private void tryChat(ServerDiscordConfig config, String line) {
         ServerDiscordConfig.ChannelConfig cc = config.getPlayerChat();
-        if (!cc.isEnabled() || cc.getChannelId() == null) return;
+        if (!cc.isEnabled()) return;
+        if (cc.getChannelId() == null) {
+            log.debug("[log-processor] chat enabled but no channel selected — skipping line");
+            return;
+        }
 
         Matcher m = CHAT_PATTERN.matcher(line);
         if (!m.find()) {
@@ -113,7 +117,11 @@ public class LogProcessingService {
 
     private void tryJoinLeave(ServerDiscordConfig config, String line) {
         ServerDiscordConfig.ChannelConfig cc = config.getPlayerEvents();
-        if (!cc.isEnabled() || cc.getChannelId() == null) return;
+        if (!cc.isEnabled()) return;
+        if (cc.getChannelId() == null) {
+            log.debug("[log-processor] events enabled but no channel selected — skipping line");
+            return;
+        }
 
         Matcher join  = JOIN_PATTERN.matcher(line);
         Matcher leave = LEAVE_PATTERN.matcher(line);
@@ -141,7 +149,11 @@ public class LogProcessingService {
 
     private void tryWhitelistRejection(ServerDiscordConfig config, String serverId, String line) {
         ServerDiscordConfig.ChannelConfig cc = config.getWhitelistRequests();
-        if (!cc.isEnabled() || cc.getChannelId() == null) return;
+        if (!cc.isEnabled()) return;
+        if (cc.getChannelId() == null) {
+            log.debug("[log-processor] whitelist enabled but no channel selected — skipping line");
+            return;
+        }
 
         String playerName = null;
         String playerUuid = null;

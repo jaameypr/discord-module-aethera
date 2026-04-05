@@ -94,6 +94,14 @@ public class AetheraLogPollerService {
             if (!anyChannelEnabled) continue;
 
             String serverId = config.getServerId();
+            String chatCh    = config.getPlayerChat().getChannelId();
+            String eventsCh  = config.getPlayerEvents().getChannelId();
+            String wlCh      = config.getWhitelistRequests().getChannelId();
+            log.info("[log-poller] server={} chat={} events={} whitelist={}",
+                    serverId,
+                    chatCh   != null ? chatCh   : "NO_CHANNEL",
+                    eventsCh != null ? eventsCh : "NO_CHANNEL",
+                    wlCh     != null ? wlCh     : "NO_CHANNEL");
             long since = lastSeenTimestamps.getOrDefault(serverId, System.currentTimeMillis() - 10_000L);
 
             try {
