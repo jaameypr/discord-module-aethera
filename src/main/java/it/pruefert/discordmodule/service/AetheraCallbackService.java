@@ -81,9 +81,11 @@ public class AetheraCallbackService {
                 request = request.header(HttpHeaders.AUTHORIZATION, "Bearer " + apiKey);
             }
             String[] lines = request.retrieve().body(String[].class);
+            log.info("[aethera-callback] fetchLogs server={} url={} returned={} lines",
+                    serverId, url, lines != null ? lines.length : 0);
             return lines != null ? lines : new String[0];
         } catch (Exception e) {
-            log.debug("[aethera-callback] Log fetch failed for server {}: {}", serverId, e.getMessage());
+            log.warn("[aethera-callback] Log fetch failed for server {}: {}", serverId, e.getMessage());
             return new String[0];
         }
     }

@@ -72,25 +72,31 @@ public class AetheraLogPollerService {
 
             try {
                 String[] lines = callback.fetchRecentLogs(serverId, since);
+                log.info("[log-poller] server={} fetched={} lines since={}", serverId, lines.length, since);
+
                 if (lines.length > 0) {
                     long fetchedAt = System.currentTimeMillis();
                     LinkedHashSet<String> seen = seenLines.computeIfAbsent(serverId, k -> new LinkedHashSet<>());
 
                     for (String line : lines) {
                         if (line == null || line.isBlank()) continue;
-                        if (!seen.add(line)) continue; // already processed
+                        if (!seen.add(line)) {
+                            log.debug("[log-poller] skipping duplicate: {}", line);
+                            continue;
+                        }
 
                         // Trim dedup set to avoid unbounded memory growth
                         if (seen.size() > MAX_DEDUP_SIZE) {
                             seen.remove(seen.iterator().next());
                         }
 
+                        log.info("[log-poller] processing: {}", line);
                         processor.processLine(serverId, line);
                     }
                     lastSeenTimestamps.put(serverId, fetchedAt);
                 }
             } catch (Exception e) {
-                log.debug("[log-poller] Error polling server {}: {}", serverId, e.getMessage());
+                log.warn("[log-poller] Error polling server {}: {}", serverId, e.getMessage());
             }
         }
     }

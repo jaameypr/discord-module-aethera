@@ -81,7 +81,10 @@ public class LogProcessingService {
      */
     public void processLine(String serverId, String line) {
         ServerDiscordConfig config = configRepo.findById(serverId).orElse(null);
-        if (config == null || config.getGuildId() == null) return;
+        if (config == null || config.getGuildId() == null) {
+            log.warn("[log-processor] no config for server {} — skipping line: {}", serverId, line);
+            return;
+        }
 
         tryChat(config, line);
         tryJoinLeave(config, line);
@@ -97,11 +100,14 @@ public class LogProcessingService {
         if (!cc.isEnabled() || cc.getChannelId() == null) return;
 
         Matcher m = CHAT_PATTERN.matcher(line);
-        if (!m.find()) return;
+        if (!m.find()) {
+            log.debug("[log-processor] chat: no match on: {}", line);
+            return;
+        }
 
         String player  = m.group(1);
         String message = m.group(2);
-
+        log.info("[log-processor] chat match: player={} message={}", player, message);
         bot.sendMessage(cc.getChannelId(), "**" + player + "** » " + message);
     }
 
@@ -114,6 +120,7 @@ public class LogProcessingService {
 
         if (join.find()) {
             String player = join.group(1);
+            log.info("[log-processor] join match: player={}", player);
             EmbedBuilder embed = new EmbedBuilder()
                     .setColor(Color.decode("#22c55e"))
                     .setDescription("🟢 **" + player + "** joined the server")
@@ -121,11 +128,14 @@ public class LogProcessingService {
             bot.sendEmbed(cc.getChannelId(), embed);
         } else if (leave.find()) {
             String player = leave.group(1);
+            log.info("[log-processor] leave match: player={}", player);
             EmbedBuilder embed = new EmbedBuilder()
                     .setColor(Color.decode("#ef4444"))
                     .setDescription("🔴 **" + player + "** left the server")
                     .setTimestamp(Instant.now());
             bot.sendEmbed(cc.getChannelId(), embed);
+        } else {
+            log.debug("[log-processor] join/leave: no match on: {}", line);
         }
     }
 
