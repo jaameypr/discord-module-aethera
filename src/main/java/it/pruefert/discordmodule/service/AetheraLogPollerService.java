@@ -8,6 +8,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
@@ -17,14 +18,24 @@ import java.util.concurrent.ConcurrentHashMap;
  * to {@link LogProcessingService} for Discord notification dispatching.
  *
  * <p>Runs every {@code AETHERA_LOG_POLL_INTERVAL_MS} milliseconds (default: 3 000 ms).</p>
+ *
+ * <p>Because Docker log entries frequently have {@code null} timestamps, lines are
+ * deduplicated in-memory (per server, last {@value MAX_DEDUP_SIZE} lines) so that
+ * older lines repeated in the tail do not produce duplicate Discord messages.</p>
  */
 @Service
 public class AetheraLogPollerService {
 
     private static final Logger log = LoggerFactory.getLogger(AetheraLogPollerService.class);
 
+    /** Maximum number of recently-seen line hashes to retain per server. */
+    private static final int MAX_DEDUP_SIZE = 200;
+
     /** Per-server last-seen timestamp (epoch ms). */
     private final Map<String, Long> lastSeenTimestamps = new ConcurrentHashMap<>();
+
+    /** Per-server dedup set — prevents re-posting lines with null Docker timestamps. */
+    private final Map<String, LinkedHashSet<String>> seenLines = new ConcurrentHashMap<>();
 
     private final ServerDiscordConfigRepository configRepo;
     private final AetheraCallbackService        callback;
@@ -62,10 +73,18 @@ public class AetheraLogPollerService {
             try {
                 String[] lines = callback.fetchRecentLogs(serverId, since);
                 if (lines.length > 0) {
-                    // Advance the cursor BEFORE processing to avoid the race window
-                    // where new log lines land between fetch and timestamp update.
                     long fetchedAt = System.currentTimeMillis();
+                    LinkedHashSet<String> seen = seenLines.computeIfAbsent(serverId, k -> new LinkedHashSet<>());
+
                     for (String line : lines) {
+                        if (line == null || line.isBlank()) continue;
+                        if (!seen.add(line)) continue; // already processed
+
+                        // Trim dedup set to avoid unbounded memory growth
+                        if (seen.size() > MAX_DEDUP_SIZE) {
+                            seen.remove(seen.iterator().next());
+                        }
+
                         processor.processLine(serverId, line);
                     }
                     lastSeenTimestamps.put(serverId, fetchedAt);
