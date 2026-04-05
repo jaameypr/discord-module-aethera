@@ -24,7 +24,7 @@ management:
 aethera:
   api-key: ${AETHERA_API_KEY:}
   callback-url: ${AETHERA_CALLBACK_URL:http://aethera-app:3000}
-  log-poll-interval-ms: ${AETHERA_LOG_POLL_INTERVAL_MS:3000}
+  log-poll-interval-ms: ${AETHERA_LOG_POLL_INTERVAL_MS:1500}
 
 # Discord bot
 discord:

@@ -2,7 +2,6 @@ package it.pruefert.discordmodule.service;
 
 import it.pruefert.discordmodule.bot.DiscordBotService;
 import it.pruefert.discordmodule.model.ServerDiscordConfig;
-import it.pruefert.discordmodule.model.WhitelistRequest;
 import it.pruefert.discordmodule.repository.ServerDiscordConfigRepository;
 import net.dv8tion.jda.api.EmbedBuilder;
 import org.slf4j.Logger;
@@ -11,6 +10,9 @@ import org.springframework.stereotype.Service;
 
 import java.awt.Color;
 import java.time.Instant;
+import java.util.LinkedHashMap;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -43,23 +45,33 @@ public class LogProcessingService {
             Pattern.compile("([a-zA-Z0-9_]{2,16}) left the game");
 
     /**
-     * Whitelist rejection — two variants:
+     * Whitelist rejection patterns — three variants:
      * <ol>
-     *   <li>Older vanilla: {@code PlayerName[/IP] logged in but they are not on the white-list}</li>
-     *   <li>Modern Paper/vanilla: {@code name='PlayerName'...lost connection: You are not white-listed on this server}</li>
+     *   <li>Old vanilla: {@code PlayerName[/IP] logged in but they are not on the white-list}</li>
+     *   <li>Modern vanilla/Paper: {@code PlayerName (/IP:port) lost connection: You are not white-listed}</li>
+     *   <li>Alternate modern: {@code Disconnecting PlayerName (/IP:port): You are not white-listed}</li>
      * </ol>
      */
     private static final Pattern WHITELIST_OLD_PATTERN =
             Pattern.compile("([a-zA-Z0-9_]{2,16})\\[/[\\S]+\\] logged in but they are not on the white-list");
 
-    private static final Pattern WHITELIST_NEW_PATTERN =
-            Pattern.compile("name='([a-zA-Z0-9_]{2,16})'.*?lost connection: You are not white-listed on this server",
+    /** Matches: "PlayerName (/ip:port) lost connection: You are not white-listed on this server" */
+    private static final Pattern WHITELIST_LOST_CONN_PATTERN =
+            Pattern.compile("([a-zA-Z0-9_]{2,16}) \\(/[^)]+\\) lost connection: You are not white-listed on this server",
                     Pattern.CASE_INSENSITIVE);
 
-    /** UUID extraction from modern whitelist rejection line */
-    private static final Pattern UUID_PATTERN =
-            Pattern.compile("id='([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})'",
+    /** Matches: "Disconnecting PlayerName (/ip:port): You are not white-listed on this server" */
+    private static final Pattern WHITELIST_DISCONNECTING_PATTERN =
+            Pattern.compile("Disconnecting ([a-zA-Z0-9_]{2,16}) \\(/[^)]+\\).*?You are not white-listed on this server",
                     Pattern.CASE_INSENSITIVE);
+
+    /** Matches: "UUID of player PlayerName is <uuid>" — used to correlate UUIDs across log lines */
+    private static final Pattern UUID_LINE_PATTERN =
+            Pattern.compile("UUID of player ([a-zA-Z0-9_]{2,16}) is ([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})",
+                    Pattern.CASE_INSENSITIVE);
+
+    // Per-server UUID cache: playerName (lowercase) -> UUID, bounded to 200 entries
+    private final Map<String, Map<String, String>> uuidCache = new ConcurrentHashMap<>();
 
     // -------------------------------------------------------------------------
 
@@ -80,6 +92,9 @@ public class LogProcessingService {
      * Checks against all configured event channels and dispatches Discord messages.
      */
     public void processLine(String serverId, String line) {
+        // Always cache UUID lines so whitelist rejection can correlate them
+        cacheUuidIfPresent(serverId, line);
+
         ServerDiscordConfig config = configRepo.findById(serverId).orElse(null);
         if (config == null || config.getGuildId() == null) {
             log.warn("[log-processor] no config for server {} — skipping line: {}", serverId, line);
@@ -89,6 +104,27 @@ public class LogProcessingService {
         tryChat(config, line);
         tryJoinLeave(config, line);
         tryWhitelistRejection(config, serverId, line);
+    }
+
+    /** Store "UUID of player X is Y" lines in a per-server bounded cache. */
+    @SuppressWarnings("unchecked")
+    private void cacheUuidIfPresent(String serverId, String line) {
+        Matcher m = UUID_LINE_PATTERN.matcher(line);
+        if (!m.find()) return;
+
+        String playerName = m.group(1);
+        String uuid       = m.group(2);
+
+        // Bounded LinkedHashMap (evicts eldest on overflow)
+        Map<String, String> cache = uuidCache.computeIfAbsent(serverId, k ->
+                new LinkedHashMap<>(64, 0.75f, false) {
+                    @Override protected boolean removeEldestEntry(Map.Entry<String, String> eldest) {
+                        return size() > 200;
+                    }
+                });
+
+        cache.put(playerName.toLowerCase(), uuid);
+        log.debug("[log-processor] cached UUID for {}: {}", playerName, uuid);
     }
 
     // -------------------------------------------------------------------------
@@ -156,24 +192,26 @@ public class LogProcessingService {
         }
 
         String playerName = null;
-        String playerUuid = null;
 
-        Matcher oldMatcher = WHITELIST_OLD_PATTERN.matcher(line);
-        Matcher newMatcher = WHITELIST_NEW_PATTERN.matcher(line);
+        Matcher lostConn      = WHITELIST_LOST_CONN_PATTERN.matcher(line);
+        Matcher disconnecting = WHITELIST_DISCONNECTING_PATTERN.matcher(line);
+        Matcher oldStyle      = WHITELIST_OLD_PATTERN.matcher(line);
 
-        if (oldMatcher.find()) {
-            playerName = oldMatcher.group(1);
-        } else if (newMatcher.find()) {
-            playerName = newMatcher.group(1);
-            Matcher uuidMatcher = UUID_PATTERN.matcher(line);
-            if (uuidMatcher.find()) {
-                playerUuid = uuidMatcher.group(1);
-            }
+        if (lostConn.find()) {
+            playerName = lostConn.group(1);
+        } else if (disconnecting.find()) {
+            playerName = disconnecting.group(1);
+        } else if (oldStyle.find()) {
+            playerName = oldStyle.group(1);
         }
 
         if (playerName == null) return;
 
-        log.info("[log-processor] Whitelist rejection for '{}' on server {}", playerName, serverId);
+        // Look up UUID from the cache (populated by "UUID of player X is Y" lines)
+        Map<String, String> cache = uuidCache.get(serverId);
+        String playerUuid = cache != null ? cache.get(playerName.toLowerCase()) : null;
+
+        log.info("[log-processor] whitelist rejection: player={} uuid={} server={}", playerName, playerUuid, serverId);
         whitelistService.handleRejection(serverId, playerName, playerUuid, cc.getChannelId(), cc.getRequiredRoleId());
     }
 }
