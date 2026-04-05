@@ -5,18 +5,18 @@ import it.pruefert.discordmodule.model.ServerDiscordConfig;
 import it.pruefert.discordmodule.model.WhitelistRequest;
 import it.pruefert.discordmodule.repository.ServerDiscordConfigRepository;
 import it.pruefert.discordmodule.repository.WhitelistRequestRepository;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
-import java.util.Map;
 
-/**
- * REST endpoints for per-server Discord configuration and whitelist request listing.
- */
 @RestController
 @RequestMapping("/api/servers")
 public class ServerConfigController {
+
+    private static final Logger log = LoggerFactory.getLogger(ServerConfigController.class);
 
     private final ServerDiscordConfigRepository configRepo;
     private final WhitelistRequestRepository    requestRepo;
@@ -27,42 +27,44 @@ public class ServerConfigController {
         this.requestRepo = requestRepo;
     }
 
-    /** GET /api/servers/{serverId}/config */
     @GetMapping("/{serverId}/config")
     public ResponseEntity<?> getConfig(@PathVariable String serverId) {
         ServerDiscordConfig config = configRepo.findById(serverId)
                 .orElse(newEmptyConfig(serverId));
+        log.info("[config] GET serverId={} guildId={}", serverId, config.getGuildId());
         return ResponseEntity.ok(toDto(config));
     }
 
-    /** PUT /api/servers/{serverId}/config */
     @PutMapping("/{serverId}/config")
     public ResponseEntity<?> updateConfig(@PathVariable String serverId,
                                            @RequestBody ServerDiscordConfigDto dto) {
+        log.info("[config] PUT serverId={} guildId={} chatEnabled={} eventsEnabled={} whitelistEnabled={}",
+                serverId, dto.getGuildId(),
+                dto.getPlayerChat() != null && dto.getPlayerChat().isEnabled(),
+                dto.getPlayerEvents() != null && dto.getPlayerEvents().isEnabled(),
+                dto.getWhitelistRequests() != null && dto.getWhitelistRequests().isEnabled());
+
         ServerDiscordConfig config = configRepo.findById(serverId)
                 .orElse(newEmptyConfig(serverId));
 
-        // Apply guild info
         config.setGuildId(dto.getGuildId());
         config.setGuildName(dto.getGuildName());
-
-        // Apply channel configs
         config.setPlayerChat(fromDto(dto.getPlayerChat()));
         config.setPlayerEvents(fromDto(dto.getPlayerEvents()));
         config.setWhitelistRequests(fromDto(dto.getWhitelistRequests()));
 
         configRepo.save(config);
+        log.info("[config] saved config for serverId={}", serverId);
         return ResponseEntity.ok(toDto(config));
     }
 
-    /** DELETE /api/servers/{serverId}/config — remove the server's Discord config. */
     @DeleteMapping("/{serverId}/config")
     public ResponseEntity<Void> deleteConfig(@PathVariable String serverId) {
+        log.info("[config] DELETE serverId={}", serverId);
         configRepo.deleteById(serverId);
         return ResponseEntity.noContent().build();
     }
 
-    /** GET /api/servers/{serverId}/whitelist-requests — pending whitelist requests. */
     @GetMapping("/{serverId}/whitelist-requests")
     public ResponseEntity<List<WhitelistRequest>> listRequests(@PathVariable String serverId) {
         List<WhitelistRequest> reqs = requestRepo

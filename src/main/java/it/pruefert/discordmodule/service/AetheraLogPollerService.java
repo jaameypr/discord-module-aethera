@@ -55,9 +55,12 @@ public class AetheraLogPollerService {
     @Scheduled(fixedDelayString = "${aethera.log-poll-interval-ms:3000}")
     public void poll() {
         List<ServerDiscordConfig> configs = configRepo.findAll();
-        if (configs.isEmpty()) return;
+        if (configs.isEmpty()) {
+            log.info("[log-poller] no server configs in DB — save a Discord config in the server detail view first");
+            return;
+        }
 
-        for (ServerDiscordConfig config : configs) {
+        log.info("[log-poller] polling {} configured server(s)", configs.size());
             if (config.getGuildId() == null) continue;
 
             boolean anyChannelEnabled =
