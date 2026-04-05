@@ -58,14 +58,6 @@
         "required": true
       },
       {
-        "key": "DISCORD_PUBLIC_KEY",
-        "label": "Discord Public Key",
-        "description": "Public key for interaction signature verification (General Information → Public Key)",
-        "default": "",
-        "required": true,
-        "secret": true
-      },
-      {
         "key": "AETHERA_CALLBACK_URL",
         "label": "Aethera Internal URL",
         "description": "Internal URL of the Aethera app (used for log polling and whitelist callbacks)",
