@@ -2,10 +2,11 @@ package it.pruefert.discordmodule.service;
 
 import it.pruefert.discordmodule.model.ServerDiscordConfig;
 import it.pruefert.discordmodule.repository.ServerDiscordConfigRepository;
+import jakarta.annotation.PostConstruct;
+import jakarta.annotation.PreDestroy;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 
 import java.util.LinkedHashSet;
@@ -14,28 +15,20 @@ import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
- * Scheduled service that polls Aethera for new server log lines and forwards them
- * to {@link LogProcessingService} for Discord notification dispatching.
+ * Polls Aethera for new server log lines and forwards them to
+ * {@link LogProcessingService} for Discord notification dispatching.
  *
- * <p>Runs every {@code AETHERA_LOG_POLL_INTERVAL_MS} milliseconds (default: 3 000 ms).</p>
- *
- * <p>Because Docker log entries frequently have {@code null} timestamps, lines are
- * deduplicated in-memory (per server, last {@value MAX_DEDUP_SIZE} lines) so that
- * older lines repeated in the tail do not produce duplicate Discord messages.</p>
+ * Uses a dedicated virtual thread loop instead of @Scheduled to guarantee
+ * reliable startup regardless of the Spring scheduler configuration.
  */
 @Service
 public class AetheraLogPollerService {
 
     private static final Logger log = LoggerFactory.getLogger(AetheraLogPollerService.class);
-
-    /** Maximum number of recently-seen line hashes to retain per server. */
     private static final int MAX_DEDUP_SIZE = 200;
 
-    /** Per-server last-seen timestamp (epoch ms). */
-    private final Map<String, Long> lastSeenTimestamps = new ConcurrentHashMap<>();
-
-    /** Per-server dedup set — prevents re-posting lines with null Docker timestamps. */
-    private final Map<String, LinkedHashSet<String>> seenLines = new ConcurrentHashMap<>();
+    private final Map<String, Long>                    lastSeenTimestamps = new ConcurrentHashMap<>();
+    private final Map<String, LinkedHashSet<String>>   seenLines          = new ConcurrentHashMap<>();
 
     private final ServerDiscordConfigRepository configRepo;
     private final AetheraCallbackService        callback;
@@ -43,6 +36,8 @@ public class AetheraLogPollerService {
 
     @Value("${aethera.log-poll-interval-ms:3000}")
     private long pollIntervalMs;
+
+    private volatile boolean running = false;
 
     public AetheraLogPollerService(ServerDiscordConfigRepository configRepo,
                                     AetheraCallbackService callback,
@@ -52,11 +47,37 @@ public class AetheraLogPollerService {
         this.processor  = processor;
     }
 
-    @Scheduled(fixedDelayString = "${aethera.log-poll-interval-ms:3000}")
-    public void poll() {
+    @PostConstruct
+    public void start() {
+        running = true;
+        log.info("[log-poller] starting — poll interval {}ms", pollIntervalMs);
+        Thread.startVirtualThread(() -> {
+            while (running) {
+                try {
+                    poll();
+                } catch (Exception e) {
+                    log.warn("[log-poller] unexpected error in poll loop: {}", e.getMessage());
+                }
+                try {
+                    Thread.sleep(pollIntervalMs);
+                } catch (InterruptedException ie) {
+                    Thread.currentThread().interrupt();
+                    break;
+                }
+            }
+            log.info("[log-poller] stopped");
+        });
+    }
+
+    @PreDestroy
+    public void stop() {
+        running = false;
+    }
+
+    private void poll() {
         List<ServerDiscordConfig> configs = configRepo.findAll();
         if (configs.isEmpty()) {
-            log.info("[log-poller] no server configs in DB — save a Discord config in the server detail view first");
+            log.info("[log-poller] no server configs in DB — configure and save the Discord tab first");
             return;
         }
 
@@ -89,20 +110,18 @@ public class AetheraLogPollerService {
                             log.debug("[log-poller] skipping duplicate: {}", line);
                             continue;
                         }
-
-                        // Trim dedup set to avoid unbounded memory growth
                         if (seen.size() > MAX_DEDUP_SIZE) {
                             seen.remove(seen.iterator().next());
                         }
-
                         log.info("[log-poller] processing: {}", line);
                         processor.processLine(serverId, line);
                     }
                     lastSeenTimestamps.put(serverId, fetchedAt);
                 }
             } catch (Exception e) {
-                log.warn("[log-poller] Error polling server {}: {}", serverId, e.getMessage());
+                log.warn("[log-poller] error polling server {}: {}", serverId, e.getMessage());
             }
         }
     }
 }
+
