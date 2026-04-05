@@ -24,9 +24,12 @@ public class WhitelistService {
 
     private static final Logger log = LoggerFactory.getLogger(WhitelistService.class);
 
-    /** Crafatar avatar URL template (80px face thumbnail). */
+    /** Mineatar.io face avatar URL (128px at scale=4). */
     private static final String SKIN_URL_TEMPLATE =
-            "https://crafatar.com/avatars/%s?size=80&overlay";
+            "https://mineatar.io/face/%s?scale=4";
+
+    /** Steve fallback UUID for players without a known UUID. */
+    private static final String STEVE_UUID = "8667ba71b85a4004af54457a9734eed7";
 
     /** Mojang profiles API endpoint. */
     private static final String MOJANG_API =
@@ -79,7 +82,7 @@ public class WhitelistService {
 
         String skinUrl = playerUuid != null
                 ? SKIN_URL_TEMPLATE.formatted(playerUuid.replace("-", ""))
-                : "https://crafatar.com/avatars/8667ba71b85a4004af54457a9734eed7?size=80&overlay"; // Steve fallback
+                : SKIN_URL_TEMPLATE.formatted(STEVE_UUID);
 
         WhitelistRequest req = new WhitelistRequest();
         req.setServerId(serverId);

@@ -3,13 +3,10 @@ package it.pruefert.discordmodule.service;
 import it.pruefert.discordmodule.bot.DiscordBotService;
 import it.pruefert.discordmodule.model.ServerDiscordConfig;
 import it.pruefert.discordmodule.repository.ServerDiscordConfigRepository;
-import net.dv8tion.jda.api.EmbedBuilder;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 
-import java.awt.Color;
-import java.time.Instant;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
@@ -165,19 +162,11 @@ public class LogProcessingService {
         if (join.find()) {
             String player = join.group(1);
             log.info("[log-processor] join match: player={}", player);
-            EmbedBuilder embed = new EmbedBuilder()
-                    .setColor(Color.decode("#22c55e"))
-                    .setDescription("🟢 **" + player + "** joined the server")
-                    .setTimestamp(Instant.now());
-            bot.sendEmbed(cc.getChannelId(), embed);
+            bot.sendMessage(cc.getChannelId(), "🟢 **" + player + "** joined the server");
         } else if (leave.find()) {
             String player = leave.group(1);
             log.info("[log-processor] leave match: player={}", player);
-            EmbedBuilder embed = new EmbedBuilder()
-                    .setColor(Color.decode("#ef4444"))
-                    .setDescription("🔴 **" + player + "** left the server")
-                    .setTimestamp(Instant.now());
-            bot.sendEmbed(cc.getChannelId(), embed);
+            bot.sendMessage(cc.getChannelId(), "🔴 **" + player + "** left the server");
         } else {
             log.debug("[log-processor] join/leave: no match on: {}", line);
         }
