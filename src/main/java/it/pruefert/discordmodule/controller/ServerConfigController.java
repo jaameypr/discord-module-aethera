@@ -52,6 +52,7 @@ public class ServerConfigController {
         config.setPlayerChat(fromDto(dto.getPlayerChat()));
         config.setPlayerEvents(fromDto(dto.getPlayerEvents()));
         config.setWhitelistRequests(fromDto(dto.getWhitelistRequests()));
+        config.setServerEvents(fromDto(dto.getServerEvents()));
 
         configRepo.save(config);
         log.info("[config] saved config for serverId={}", serverId);
@@ -89,6 +90,7 @@ public class ServerConfigController {
         dto.setPlayerChat(channelToDto(c.getPlayerChat()));
         dto.setPlayerEvents(channelToDto(c.getPlayerEvents()));
         dto.setWhitelistRequests(channelToDto(c.getWhitelistRequests()));
+        dto.setServerEvents(channelToDto(c.getServerEvents() != null ? c.getServerEvents() : new ServerDiscordConfig.ChannelConfig()));
         return dto;
     }
 

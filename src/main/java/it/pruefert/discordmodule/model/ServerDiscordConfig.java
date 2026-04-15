@@ -19,6 +19,7 @@ public class ServerDiscordConfig {
     private ChannelConfig playerChat       = new ChannelConfig();
     private ChannelConfig playerEvents     = new ChannelConfig();
     private ChannelConfig whitelistRequests = new ChannelConfig();
+    private ChannelConfig serverEvents     = new ChannelConfig();
 
     // -----------------------------------------------------------------------
     // Inner types
@@ -54,4 +55,6 @@ public class ServerDiscordConfig {
     public void          setPlayerEvents(ChannelConfig c)  { this.playerEvents = c; }
     public ChannelConfig getWhitelistRequests()            { return whitelistRequests; }
     public void          setWhitelistRequests(ChannelConfig c) { this.whitelistRequests = c; }
+    public ChannelConfig getServerEvents()                 { return serverEvents; }
+    public void          setServerEvents(ChannelConfig c)  { this.serverEvents = c; }
 }

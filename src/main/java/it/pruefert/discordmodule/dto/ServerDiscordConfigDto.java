@@ -12,6 +12,7 @@ public class ServerDiscordConfigDto {
     private ChannelConfigDto playerChat        = new ChannelConfigDto();
     private ChannelConfigDto playerEvents      = new ChannelConfigDto();
     private ChannelConfigDto whitelistRequests = new ChannelConfigDto();
+    private ChannelConfigDto serverEvents      = new ChannelConfigDto();
 
     public static class ChannelConfigDto {
         private boolean enabled       = false;
@@ -36,4 +37,6 @@ public class ServerDiscordConfigDto {
     public void              setPlayerEvents(ChannelConfigDto c)       { this.playerEvents = c; }
     public ChannelConfigDto  getWhitelistRequests()                    { return whitelistRequests; }
     public void              setWhitelistRequests(ChannelConfigDto c)  { this.whitelistRequests = c; }
+    public ChannelConfigDto  getServerEvents()                         { return serverEvents; }
+    public void              setServerEvents(ChannelConfigDto c)       { this.serverEvents = c; }
 }
