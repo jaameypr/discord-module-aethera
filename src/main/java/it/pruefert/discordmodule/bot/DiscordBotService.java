@@ -1,18 +1,12 @@
 package it.pruefert.discordmodule.bot;
 
-import it.pruefert.discordmodule.service.AetheraCallbackService;
 import it.pruefert.discordmodule.service.WhitelistService;
-import net.dv8tion.jda.api.EmbedBuilder;
 import net.dv8tion.jda.api.JDA;
 import net.dv8tion.jda.api.JDABuilder;
-import net.dv8tion.jda.api.Permission;
 import net.dv8tion.jda.api.entities.Guild;
 import net.dv8tion.jda.api.entities.channel.concrete.TextChannel;
-import net.dv8tion.jda.api.events.interaction.command.SlashCommandInteractionEvent;
 import net.dv8tion.jda.api.events.interaction.component.ButtonInteractionEvent;
 import net.dv8tion.jda.api.hooks.ListenerAdapter;
-import net.dv8tion.jda.api.interactions.commands.OptionType;
-import net.dv8tion.jda.api.interactions.commands.build.Commands;
 import net.dv8tion.jda.api.interactions.components.buttons.Button;
 import net.dv8tion.jda.api.requests.GatewayIntent;
 import net.dv8tion.jda.api.utils.messages.MessageCreateBuilder;
@@ -26,9 +20,8 @@ import org.springframework.stereotype.Service;
 import jakarta.annotation.PostConstruct;
 import jakarta.annotation.PreDestroy;
 
-import java.awt.Color;
 import java.util.List;
-import java.util.Optional;
+import java.util.Map;
 
 /**
  * Manages the JDA (Java Discord API) bot lifecycle.
@@ -57,9 +50,6 @@ public class DiscordBotService extends ListenerAdapter {
     @Lazy
     private WhitelistService whitelistService;
 
-    @Autowired
-    private AetheraCallbackService aetheraCallbackService;
-
     // -----------------------------------------------------------------------
     // Lifecycle
     // -----------------------------------------------------------------------
@@ -84,15 +74,6 @@ public class DiscordBotService extends ListenerAdapter {
                         .awaitReady();
 
                 log.info("[discord-bot] Connected as {} ({})", jda.getSelfUser().getName(), jda.getSelfUser().getId());
-
-                // Register global slash commands
-                jda.updateCommands().addCommands(
-                    Commands.slash("verify", "Verknüpfe diesen Discord-Server mit deinem Aethera-Projekt")
-                            .addOption(OptionType.STRING, "code", "Dein Verifizierungscode aus dem Aethera Dashboard", true)
-                ).queue(
-                    cmds -> log.info("[discord-bot] Slash commands registered"),
-                    err  -> log.error("[discord-bot] Failed to register slash commands: {}", err.getMessage())
-                );
             } catch (Exception e) {
                 log.error("[discord-bot] Failed to start JDA bot: {}", e.getMessage());
             }
@@ -109,52 +90,6 @@ public class DiscordBotService extends ListenerAdapter {
 
     public boolean isReady() {
         return jda != null && jda.getStatus() == JDA.Status.CONNECTED;
-    }
-
-    // -----------------------------------------------------------------------
-    // Event: Slash Command
-    // -----------------------------------------------------------------------
-
-    @Override
-    public void onSlashCommandInteraction(SlashCommandInteractionEvent event) {
-        if (!event.getName().equals("verify")) return;
-
-        // Must be used inside a guild, not in DMs
-        Guild guild = event.getGuild();
-        if (guild == null) {
-            event.reply("❌ Dieser Befehl kann nur in einem Server verwendet werden.")
-                    .setEphemeral(true).queue();
-            return;
-        }
-
-        // Require MANAGE_SERVER permission — only server admins may link a guild
-        if (!event.getMember().hasPermission(Permission.MANAGE_SERVER)) {
-            event.reply("❌ Du benötigst die Berechtigung **Server verwalten**, um diesen Befehl auszuführen.")
-                    .setEphemeral(true).queue();
-            return;
-        }
-
-        String code = event.getOption("code").getAsString();
-
-        // Defer ephemerally — the HTTP callback to Aethera may take a moment
-        event.deferReply(true).queue();
-
-        Optional<String> projectName = aetheraCallbackService.verifyCode(code, guild.getId(), guild.getName());
-
-        if (projectName.isPresent()) {
-            event.getHook().sendMessageEmbeds(
-                new EmbedBuilder()
-                    .setTitle("✅ Verifizierung erfolgreich!")
-                    .setDescription("Dieser Discord-Server wurde mit dem Projekt **" + projectName.get() + "** verknüpft.")
-                    .setColor(Color.decode("#22c55e"))
-                    .build()
-            ).queue();
-        } else {
-            event.getHook().sendMessage(
-                "❌ Code ungültig, abgelaufen oder dieser Server ist bereits verknüpft. " +
-                "Erstelle einen neuen Code im Aethera Dashboard."
-            ).queue();
-        }
     }
 
     // -----------------------------------------------------------------------
