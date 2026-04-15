@@ -7,9 +7,11 @@ import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.http.client.SimpleClientHttpRequestFactory;
 import org.springframework.stereotype.Service;
+import org.springframework.web.client.HttpClientErrorException;
 import org.springframework.web.client.RestClient;
 
 import java.util.Map;
+import java.util.Optional;
 
 /**
  * Sends callbacks to the Aethera main application.
@@ -38,6 +40,46 @@ public class AetheraCallbackService {
                 .requestFactory(factory)
                 .defaultHeader(HttpHeaders.CONTENT_TYPE, MediaType.APPLICATION_JSON_VALUE)
                 .build();
+    }
+
+    /**
+     * Tells Aethera to validate a Discord guild verification code and link the guild to a project.
+     *
+     * <p>Called when a guild member runs the {@code /verify} slash command.</p>
+     *
+     * @param code       the verification code from the Aethera dashboard
+     * @param guildId    Discord guild ID
+     * @param guildName  Discord guild name
+     * @return the linked project name, or empty on failure (invalid code, conflict, etc.)
+     */
+    public Optional<String> verifyCode(String code, String guildId, String guildName) {
+        String url = callbackBaseUrl + "/api/discord/callback/verify";
+
+        Map<String, String> body = Map.of(
+                "code", code,
+                "guildId", guildId,
+                "guildName", guildName
+        );
+
+        try {
+            var request = restClient.post().uri(url).body(body);
+            if (apiKey != null && !apiKey.isBlank()) {
+                request = request.header(HttpHeaders.AUTHORIZATION, "Bearer " + apiKey);
+            }
+            @SuppressWarnings("unchecked")
+            Map<String, Object> response = request.retrieve().body(Map.class);
+            String projectName = response != null ? (String) response.get("projectName") : null;
+            log.info("[aethera-callback] Guild {} verified → project '{}'", guildId, projectName);
+            return Optional.ofNullable(projectName);
+        } catch (HttpClientErrorException e) {
+            // 400 = invalid/expired code or guild conflict
+            log.warn("[aethera-callback] Verify code rejected for guild {}: {} {}",
+                    guildId, e.getStatusCode(), e.getResponseBodyAsString());
+            return Optional.empty();
+        } catch (Exception e) {
+            log.error("[aethera-callback] Verify code failed for guild {}: {}", guildId, e.getMessage());
+            return Optional.empty();
+        }
     }
 
     /**
